@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>API 配置中心</title
+    <title>API 配置中心</title>
     
     <!-- 恢复原有的字体链接 -->
     <div id="font-link-container">
@@ -172,6 +172,7 @@
                     <label for="api-provider-select">服务商</label>
                     <select id="api-provider-select" class="select-field">
                         <option value="openai_proxy">OpenAI (直连-安全代理模式)</option>
+                        <option value="gemini_proxy">Google Gemini (直连-安全代理模式)</option>
                         <option value="reverse_proxy">反向代理 (通用)</option>
                         <option value="custom">自定义 (OpenAI 格式)</option>
                         <option value="polling">负载均衡 (轮询 Key)</option>
@@ -226,28 +227,33 @@
                 corsNote: document.getElementById('cors-note')
             };
 
-            // A public CORS proxy. You can replace this with your own.
-            const CORS_PROXY_URL = 'https://cors-anywhere.herokuapp.com/';
+            const CORS_PROXY_URL = 'https://corsproxy.io/?';
 
             const providerData = {
-                openai_proxy: { url: CORS_PROXY_URL + 'https://api.openai.com/v1', corsBlocked: false, officialUrl: 'https://api.openai.com/v1' },
-                reverse_proxy: { url: '', corsBlocked: false },
-                custom: { url: '', corsBlocked: false },
-                polling: { url: '', corsBlocked: false },
-                openai_direct: { url: 'https://api.openai.com/v1', corsBlocked: true },
-                deepseek_direct: { url: 'https://api.deepseek.com/v1', corsBlocked: true }
+                openai_proxy: { url: 'https://api.openai.com/v1', useProxy: true, corsBlocked: false },
+                gemini_proxy: { url: 'https://generativelanguage.googleapis.com/v1beta', useProxy: true, corsBlocked: true, modelsEndpoint: false }, // Gemini model listing is special, still can't fetch
+                reverse_proxy: { url: '', useProxy: false, corsBlocked: false },
+                custom: { url: '', useProxy: false, corsBlocked: false },
+                polling: { url: '', useProxy: false, corsBlocked: false },
+                openai_direct: { url: 'https://api.openai.com/v1', useProxy: false, corsBlocked: true },
+                deepseek_direct: { url: 'https://api.deepseek.com/v1', useProxy: false, corsBlocked: true }
             };
             
-            async function fetchModels(url, key) {
+            async function fetchModels(url, key, useProxy) {
                 apiControls.status.textContent = '正在拉取模型列表...';
                 apiControls.status.className = '';
 
                 try {
-                    const finalUrl = `${url.replace(/\/$/, "")}/models`;
+                    const baseUrl = useProxy ? CORS_PROXY_URL + url : url;
+                    const finalUrl = `${baseUrl.replace(/\/$/, "")}/models`;
                     
                     const response = await fetch(finalUrl, {
                         method: 'GET',
-                        headers: { 'Authorization': `Bearer ${key}` }
+                        headers: {
+                            'Authorization': `Bearer ${key}`,
+                            'Content-Type': 'application/json'
+                        },
+                        mode: 'cors'
                     });
 
                     if (!response.ok) {
@@ -264,7 +270,10 @@
                     apiControls.status.textContent = '模型列表拉取成功！';
                     apiControls.status.classList.add('success');
                     
-                    const models = data.data || data; // Handle different API response structures
+                    const models = data.data || data;
+                    if (!Array.isArray(models)) {
+                        throw new Error('返回的数据格式不正确，无法解析模型列表。');
+                    }
                     return models.map(model => model.id).sort();
 
                 } catch (error) {
@@ -279,8 +288,8 @@
                 const data = providerData[provider];
 
                 apiControls.urlInput.value = data.url;
-                apiControls.urlInput.readOnly = !['custom', 'reverse_proxy', 'polling'].includes(provider);
-                apiControls.urlInput.placeholder = apiControls.urlInput.readOnly ? '由系统自动提供' : '请输入你的代理 URL';
+                apiControls.urlInput.readOnly = false; // All URLs are now editable
+                apiControls.urlInput.placeholder = '请输入 API URL';
 
                 if (provider === 'polling') {
                     apiControls.keyInput.style.display = 'none';
@@ -293,9 +302,16 @@
                 apiControls.model.innerHTML = '';
                 const isTestable = !data.corsBlocked;
                 apiControls.testBtn.disabled = !isTestable;
-                apiControls.corsNote.style.display = data.corsBlocked ? 'block' : 'none';
+                apiControls.corsNote.style.display = data.corsBlocked && (data.modelsEndpoint !== false) ? 'block' : 'none';
 
-                let placeholderText = isTestable ? '请先进行连接测试来拉取模型' : '模型列表无法自动拉取';
+                let placeholderText = '';
+                if (data.modelsEndpoint === false) {
+                    placeholderText = '此服务商不支持自动拉取模型';
+                } else if (!isTestable) {
+                    placeholderText = '模型列表无法自动拉取';
+                } else {
+                    placeholderText = '请先进行连接测试来拉取模型';
+                }
                 const option = document.createElement('option');
                 option.textContent = placeholderText;
                 apiControls.model.appendChild(option);
@@ -304,12 +320,10 @@
             function saveApiSettings() {
                 const provider = apiControls.provider.value;
                 const isPolling = provider === 'polling';
-                // For proxy mode, save the official URL for clarity, not the proxy URL
-                const urlToSave = provider === 'openai_proxy' ? providerData[provider].officialUrl : apiControls.urlInput.value;
 
                 const settings = {
                     provider: provider,
-                    url: urlToSave,
+                    url: apiControls.urlInput.value,
                     key: isPolling ? apiControls.keyTextarea.value : apiControls.keyInput.value,
                     model: apiControls.model.value
                 };
@@ -324,10 +338,7 @@
                     apiControls.provider.value = settings.provider || 'openai_proxy';
                     updateControlsForProvider();
                     
-                    // Restore URL based on saved provider
-                    if (apiControls.provider.value !== 'openai_proxy') {
-                       apiControls.urlInput.value = settings.url;
-                    }
+                    apiControls.urlInput.value = settings.url;
 
                     if (settings.provider === 'polling') {
                         apiControls.keyTextarea.value = settings.key;
@@ -349,9 +360,11 @@
             }
 
             async function testAndFetch() {
+                const provider = apiControls.provider.value;
+                const config = providerData[provider];
                 const url = apiControls.urlInput.value.trim();
                 let key;
-                if (apiControls.provider.value === 'polling') {
+                if (provider === 'polling') {
                     key = apiControls.keyTextarea.value.split('\n')[0].trim();
                 } else {
                     key = apiControls.keyInput.value.trim();
@@ -363,7 +376,7 @@
                     return;
                 }
 
-                const models = await fetchModels(url, key);
+                const models = await fetchModels(url, key, config.useProxy);
                 if (models.length > 0) {
                     const currentModel = apiControls.model.value;
                     apiControls.model.innerHTML = '';
@@ -383,7 +396,7 @@
             const toggleVisibilityHandler = () => {
                 const isPolling = apiControls.provider.value === 'polling';
                 const input = isPolling ? apiControls.keyTextarea : apiControls.keyInput;
-                if (isPolling) return; // Textarea doesn't have a 'type' to toggle
+                if (isPolling) return;
                 input.type = input.type === 'password' ? 'text' : 'password';
             };
             apiControls.toggleKey.addEventListener('mousedown', toggleVisibilityHandler);
