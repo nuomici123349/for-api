@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>API 配置中心</title>
+    
+    <!-- 恢复原有的字体链接 -->
+    <div id="font-link-container">
+        <link rel="preload" as="style" crossorigin
+            href="https://fontsapi.zeoseven.com/309/main/result.css"
+            onload="this.rel='stylesheet'"
+            onerror="this.href='httpsapi-storage.zeoseven.com/309/main/result.css'" />
+        <noscript>
+            <link rel="stylesheet" href="https://fontsapi.zeoseven.com/309/main/result.css" />
+        </noscript>
+    </div>
+
+    <style>
+        :root {
+            --screen-bg: #f7f9f7;
+            --text-color: #5a6e60;
+            --text-light: #a2b0a5;
+            --placeholder-bg: #e8f0e9;
+            --battery-low: #e74c3c;
+            --battery-charging: #34c759;
+            --font-main: "KingHwaOldSong", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            --global-font-size: 16px; 
+            --global-font-weight: 400;
+        }
+
+        html, body {
+            margin: 0; padding: 0; width: 100%; min-height: 100vh;
+            background-color: var(--screen-bg);
+            font-family: var(--font-main);
+            color: var(--text-color);
+            font-size: var(--global-font-size);
+            font-weight: var(--global-font-weight);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .app-container {
+            width: 100%;
+            max-width: 420px;
+            height: 100vh;
+            max-height: 850px;
+            display: flex;
+            flex-direction: column;
+            background-color: var(--placeholder-bg);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            border-radius: 20px;
+            overflow: hidden;
+        }
+
+        .app-header { 
+            padding: 10px 20px; 
+            display: flex; 
+            align-items: center; 
+            position: relative; 
+            text-align: center; 
+            flex-shrink: 0; 
+            margin-top: 45px;
+        }
+        .app-title { 
+            flex-grow: 1; 
+            font-size: 1.125em; 
+            font-weight: bold; 
+        }
+        .app-content-area { 
+            flex-grow: 1; 
+            padding: 15px 20px; 
+            overflow-y: auto; 
+        }
+        .app-content-area::-webkit-scrollbar { display: none; }
+
+        .settings-section { 
+            background-color: #fff; 
+            border-radius: 15px; 
+            padding: 15px 20px; 
+            margin-bottom: 20px; 
+            box-shadow: 0 4px 15px rgba(90, 110, 96, 0.08);
+        }
+        .settings-section h3 { font-size: 1em; margin: 0 0 15px 0; }
+        .control-group { margin-bottom: 20px; }
+        .control-group:last-child { margin-bottom: 5px; }
+        .control-group label { display: block; font-size: 0.875em; margin-bottom: 8px; color: var(--text-light); }
+        .control-group-note {
+            font-size: 0.8em;
+            color: var(--text-light);
+            margin-top: -10px;
+            padding-bottom: 10px;
+        }
+        
+        .btn { 
+            display: block; 
+            width: 100%; 
+            padding: 12px; 
+            background-color: var(--placeholder-bg); 
+            border: none; 
+            border-radius: 10px; 
+            font-family: var(--font-main); 
+            color: var(--text-color); 
+            font-size: 0.9375em; 
+            cursor: pointer; 
+            text-align: center;
+            transition: background-color 0.2s, opacity 0.2s;
+        }
+        .btn:hover { background-color: #dce6dd; }
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            background-color: var(--placeholder-bg);
+        }
+        
+        .input-field, .textarea-field, .select-field { 
+            width: 100%; 
+            padding: 12px; 
+            border: 1px solid #e0e0e0; 
+            border-radius: 10px; 
+            box-sizing: border-box; 
+            font-family: var(--font-main); 
+            font-size: 0.9em; 
+            background-color: #fdfdfd; 
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .input-field:focus, .textarea-field:focus, .select-field:focus {
+            outline: none;
+            border-color: var(--text-color);
+            box-shadow: 0 0 8px rgba(90, 110, 96, 0.15);
+        }
+        
+        .textarea-field { 
+            resize: vertical; 
+            min-height: 100px;
+        }
+        
+        .btn-restore { background-color: #e8e8e8; margin-top: 10px; }
+
+        .input-with-button { display: flex; align-items: center; gap: 10px; }
+        .input-with-button .input-field { flex-grow: 1; }
+        .input-with-button .btn-icon { 
+            padding: 10px; 
+            line-height: 0; 
+            background-color: var(--placeholder-bg); 
+            border-radius: 10px; 
+            cursor: pointer; 
+            border: none; 
+        }
+        .input-with-button .btn-icon svg { width: 20px; height: 20px; fill: var(--text-color); }
+        
+        #connection-status { 
+            margin-top: 15px; 
+            text-align: center; 
+            font-size: 0.9em; 
+            min-height: 1.2em; 
+            transition: color 0.3s;
+        }
+        #connection-status.success { color: var(--battery-charging); }
+        #connection-status.error { color: var(--battery-low); }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <h2 class="app-title">API 配置中心</h2>
+        </header>
+        <div class="app-content-area">
+            <div class="settings-section">
+                <div class="control-group">
+                    <label for="api-provider-select">服务商</label>
+                    <select id="api-provider-select" class="select-field">
+                        <option value="openai_proxy">OpenAI (直连-安全代理模式)</option>
+                        <option value="gemini_proxy">Google Gemini (直连-安全代理模式)</option>
+                        <option value="reverse_proxy">反向代理 (通用)</option>
+                        <option value="custom">自定义 (OpenAI 格式)</option>
+                        <option value="polling">负载均衡 (轮询 Key)</option>
+                        <option value="openai_direct">OpenAI (官方直连)</option>
+                        <option value="deepseek_direct">DeepSeek (官方直连)</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label for="api-url-input">API URL</label>
+                    <input type="text" id="api-url-input" class="input-field">
+                </div>
+                <div class="control-group">
+                    <label for="api-key-input">API Key</label>
+                    <div class="input-with-button">
+                        <input type="password" id="api-key-input" class="input-field">
+                        <textarea id="api-key-textarea" class="textarea-field" style="display: none;" placeholder="每行输入一个 Key"></textarea>
+                        <button id="toggle-api-key-visibility" class="btn-icon">
+                            <svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"></path></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label for="api-model-select">模型</label>
+                    <select id="api-model-select" class="select-field"></select>
+                    <p id="cors-note" class="control-group-note" style="display: none;">提示：由于浏览器安全限制，官方直连模式无法自动拉取模型列表。请使用“安全代理模式”或“反向代理”。</p>
+                </div>
+            </div>
+            <div class="settings-section">
+                <button class="btn" id="test-connection-btn">连接测试 & 拉取模型</button>
+                <p id="connection-status"></p>
+            </div>
+            <div class="settings-section">
+                <button class="btn" id="save-api-settings-btn" style="background-color: var(--text-color); color: white;">保存设置</button>
+                <button class="btn btn-restore" id="restore-api-defaults-btn">恢复默认</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const apiControls = {
+                provider: document.getElementById('api-provider-select'),
+                urlInput: document.getElementById('api-url-input'),
+                keyInput: document.getElementById('api-key-input'),
+                keyTextarea: document.getElementById('api-key-textarea'),
+                toggleKey: document.getElementById('toggle-api-key-visibility'),
+                model: document.getElementById('api-model-select'),
+                testBtn: document.getElementById('test-connection-btn'),
+                saveBtn: document.getElementById('save-api-settings-btn'),
+                restoreBtn: document.getElementById('restore-api-defaults-btn'),
+                status: document.getElementById('connection-status'),
+                corsNote: document.getElementById('cors-note')
+            };
+
+            const CORS_PROXY_URL = 'https://corsproxy.io/?';
+
+            const providerData = {
+                openai_proxy: { url: 'https://api.openai.com/v1', useProxy: true, corsBlocked: false },
+                gemini_proxy: { url: 'https://generativelanguage.googleapis.com/v1beta', useProxy: true, corsBlocked: true, modelsEndpoint: false }, // Gemini model listing is special, still can't fetch
+                reverse_proxy: { url: '', useProxy: false, corsBlocked: false },
+                custom: { url: '', useProxy: false, corsBlocked: false },
+                polling: { url: '', useProxy: false, corsBlocked: false },
+                openai_direct: { url: 'https://api.openai.com/v1', useProxy: false, corsBlocked: true },
+                deepseek_direct: { url: 'https://api.deepseek.com/v1', useProxy: false, corsBlocked: true }
+            };
+            
+            async function fetchModels(url, key, useProxy) {
+                apiControls.status.textContent = '正在拉取模型列表...';
+                apiControls.status.className = '';
+
+                try {
+                    const baseUrl = useProxy ? CORS_PROXY_URL + url : url;
+                    const finalUrl = `${baseUrl.replace(/\/$/, "")}/models`;
+                    
+                    const response = await fetch(finalUrl, {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': `Bearer ${key}`,
+                            'Content-Type': 'application/json'
+                        },
+                        mode: 'cors'
+                    });
+
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        try {
+                            const errorData = JSON.parse(errorText);
+                            throw new Error(errorData.error?.message || `HTTP ${response.status}`);
+                        } catch (e) {
+                            throw new Error(errorText.slice(0, 100) || `HTTP ${response.status}`);
+                        }
+                    }
+
+                    const data = await response.json();
+                    apiControls.status.textContent = '模型列表拉取成功！';
+                    apiControls.status.classList.add('success');
+                    
+                    const models = data.data || data;
+                    if (!Array.isArray(models)) {
+                        throw new Error('返回的数据格式不正确，无法解析模型列表。');
+                    }
+                    return models.map(model => model.id).sort();
+
+                } catch (error) {
+                    apiControls.status.textContent = `拉取失败: ${error.message}`;
+                    apiControls.status.classList.add('error');
+                    return [];
+                }
+            }
+
+            function updateControlsForProvider() {
+                const provider = apiControls.provider.value;
+                const data = providerData[provider];
+
+                apiControls.urlInput.value = data.url;
+                apiControls.urlInput.readOnly = false; // All URLs are now editable
+                apiControls.urlInput.placeholder = '请输入 API URL';
+
+                if (provider === 'polling') {
+                    apiControls.keyInput.style.display = 'none';
+                    apiControls.keyTextarea.style.display = 'block';
+                } else {
+                    apiControls.keyInput.style.display = 'block';
+                    apiControls.keyTextarea.style.display = 'none';
+                }
+                
+                apiControls.model.innerHTML = '';
+                const isTestable = !data.corsBlocked;
+                apiControls.testBtn.disabled = !isTestable;
+                apiControls.corsNote.style.display = data.corsBlocked && (data.modelsEndpoint !== false) ? 'block' : 'none';
+
+                let placeholderText = '';
+                if (data.modelsEndpoint === false) {
+                    placeholderText = '此服务商不支持自动拉取模型';
+                } else if (!isTestable) {
+                    placeholderText = '模型列表无法自动拉取';
+                } else {
+                    placeholderText = '请先进行连接测试来拉取模型';
+                }
+                const option = document.createElement('option');
+                option.textContent = placeholderText;
+                apiControls.model.appendChild(option);
+            }
+
+            function saveApiSettings() {
+                const provider = apiControls.provider.value;
+                const isPolling = provider === 'polling';
+
+                const settings = {
+                    provider: provider,
+                    url: apiControls.urlInput.value,
+                    key: isPolling ? apiControls.keyTextarea.value : apiControls.keyInput.value,
+                    model: apiControls.model.value
+                };
+                localStorage.setItem('apiSettings', JSON.stringify(settings));
+                alert('API 设置已保存!');
+            }
+
+            function loadApiSettings() {
+                const settingsJSON = localStorage.getItem('apiSettings');
+                if (settingsJSON) {
+                    const settings = JSON.parse(settingsJSON);
+                    apiControls.provider.value = settings.provider || 'openai_proxy';
+                    updateControlsForProvider();
+                    
+                    apiControls.urlInput.value = settings.url;
+
+                    if (settings.provider === 'polling') {
+                        apiControls.keyTextarea.value = settings.key;
+                    } else {
+                        apiControls.keyInput.value = settings.key;
+                    }
+                    
+                    const optionExists = Array.from(apiControls.model.options).some(opt => opt.value === settings.model);
+                    if (!optionExists && settings.model) {
+                        const option = document.createElement('option');
+                        option.value = settings.model;
+                        option.textContent = settings.model;
+                        apiControls.model.appendChild(option);
+                    }
+                    apiControls.model.value = settings.model;
+                } else {
+                    updateControlsForProvider();
+                }
+            }
+
+            async function testAndFetch() {
+                const provider = apiControls.provider.value;
+                const config = providerData[provider];
+                const url = apiControls.urlInput.value.trim();
+                let key;
+                if (provider === 'polling') {
+                    key = apiControls.keyTextarea.value.split('\n')[0].trim();
+                } else {
+                    key = apiControls.keyInput.value.trim();
+                }
+
+                if (!url || !key) {
+                    apiControls.status.textContent = 'URL 和 Key 不能为空。';
+                    apiControls.status.classList.add('error');
+                    return;
+                }
+
+                const models = await fetchModels(url, key, config.useProxy);
+                if (models.length > 0) {
+                    const currentModel = apiControls.model.value;
+                    apiControls.model.innerHTML = '';
+                    models.forEach(modelName => {
+                        const option = document.createElement('option');
+                        option.value = modelName;
+                        option.textContent = modelName;
+                        apiControls.model.appendChild(option);
+                    });
+                    if (models.includes(currentModel)) {
+                        apiControls.model.value = currentModel;
+                    }
+                }
+            }
+
+            apiControls.provider.addEventListener('change', updateControlsForProvider);
+            const toggleVisibilityHandler = () => {
+                const isPolling = apiControls.provider.value === 'polling';
+                const input = isPolling ? apiControls.keyTextarea : apiControls.keyInput;
+                if (isPolling) return;
+                input.type = input.type === 'password' ? 'text' : 'password';
+            };
+            apiControls.toggleKey.addEventListener('mousedown', toggleVisibilityHandler);
+            apiControls.toggleKey.addEventListener('mouseup', toggleVisibilityHandler);
+            apiControls.toggleKey.addEventListener('mouseleave', () => { if(apiControls.keyInput.type === 'text') apiControls.keyInput.type = 'password'; });
+            
+            apiControls.saveBtn.addEventListener('click', saveApiSettings);
+            apiControls.testBtn.addEventListener('click', testAndFetch);
+            apiControls.restoreBtn.addEventListener('click', () => {
+                localStorage.removeItem('apiSettings');
+                apiControls.provider.value = 'openai_proxy';
+                apiControls.keyInput.value = '';
+                apiControls.keyTextarea.value = '';
+                loadApiSettings();
+                alert('已恢复默认设置。');
+            });
+            
+            // Initial Load
+            loadApiSettings();
+        });
+    </script>
+</body>
+</html>
