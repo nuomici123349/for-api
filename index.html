@@ -28,10 +28,9 @@
             --global-font-weight: 400;
         }
 
-        /* 修正2: 固定布局，防止键盘顶起底部栏 */
         html, body {
-            margin: 0; padding: 0; width: 100%; height: 100%; /* 使用100%替代vh */
-            overflow: hidden; /* 防止body出现滚动条 */
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            overflow: hidden;
             background-color: var(--screen-bg);
             font-family: var(--font-main);
             color: var(--text-color);
@@ -44,7 +43,7 @@
 
         .app-container {
             width: 100%;
-            height: 100%; /* 继承父级的高度 */
+            height: 100%;
             max-width: 420px;
             max-height: 850px;
             display: flex;
@@ -101,7 +100,7 @@
         .input-with-button .btn-icon { padding: 10px; line-height: 0; background-color: var(--placeholder-bg); border-radius: 10px; cursor: pointer; border: none; }
         .input-with-button .btn-icon svg { width: 20px; height: 20px; fill: var(--text-color); }
         
-        #connection-status { margin-top: 15px; text-align: center; font-size: 0.9em; min-height: 1.2em; transition: color 0.3s; }
+        #connection-status { margin-top: 15px; text-align: center; font-size: 0.9em; min-height: 1.2em; transition: color 0.3s; white-space: pre-wrap; word-break: break-all; }
         #connection-status.success { color: var(--battery-charging); }
         #connection-status.error { color: var(--battery-low); }
 
@@ -219,7 +218,6 @@
 
         <div class="page-container">
             <div id="config-page" class="page-view active">
-                <!-- 配置页面内容... -->
                 <div class="settings-section">
                     <div class="control-group">
                         <label for="api-provider-select">服务商</label>
@@ -284,7 +282,6 @@
     </div>
 
     <script>
-        // 修正1: 修复致命的语法错误 '=>'
         document.addEventListener('DOMContentLoaded', () => {
             const apiControls = { provider: document.getElementById('api-provider-select'), urlInput: document.getElementById('api-url-input'), keyInput: document.getElementById('api-key-input'), keyTextarea: document.getElementById('api-key-textarea'), toggleKey: document.getElementById('toggle-api-key-visibility'), model: document.getElementById('api-model-select'), testBtn: document.getElementById('test-connection-btn'), saveBtn: document.getElementById('save-api-settings-btn'), restoreBtn: document.getElementById('restore-api-defaults-btn'), status: document.getElementById('connection-status'), };
             const pageControls = { title: document.getElementById('app-page-title'), configPage: document.getElementById('config-page'), presetsPage: document.getElementById('presets-page'), navConfigBtn: document.getElementById('nav-config-btn'), navPresetsBtn: document.getElementById('nav-presets-btn'), presetsListContainer: document.getElementById('presets-list-container') };
@@ -294,7 +291,7 @@
             const providerData = {
                 openai:   { url: 'https://api.openai.com/v1',                     useProxy: true, testable: true },
                 deepseek: { url: 'https://api.deepseek.com/v1',                   useProxy: true, testable: true },
-                gemini:   { url: 'https://generativelanguage.googleapis.com/v1beta', useProxy: true, testable: false, modelsEndpoint: false },
+                gemini:   { url: 'https://generativelanguage.googleapis.com/v1beta', useProxy: true, testable: true, modelsEndpoint: true },
                 claude:   { url: 'https://api.anthropic.com/v1',                  useProxy: true, testable: false, modelsEndpoint: false },
                 reverse_proxy: { url: '', useProxy: false, testable: true },
                 custom:        { url: '', useProxy: false, testable: true },
@@ -343,9 +340,80 @@
                 renderPresets();
             }
             
-            async function fetchModels(url, key, useProxy) { apiControls.status.textContent = '正在拉取模型列表...'; apiControls.status.className = ''; try { const baseUrl = useProxy ? CORS_PROXY_URL + encodeURIComponent(url) : url; const finalUrl = `${baseUrl.replace(/\/$/, "")}/models`; const response = await fetch(finalUrl, { method: 'GET', headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' }, mode: 'cors' }); if (!response.ok) { const errorText = await response.text(); throw new Error(`HTTP ${response.status}: ${errorText.slice(0, 100)}`); } const data = await response.json(); apiControls.status.textContent = '模型列表拉取成功！'; apiControls.status.classList.add('success'); const models = data.data || data; if (!Array.isArray(models)) throw new Error('返回数据格式不正确'); return models.map(model => model.id).sort(); } catch (error) { apiControls.status.textContent = `拉取失败: ${error.message}`; apiControls.status.classList.add('error'); return []; } }
+            async function fetchModels(provider, url, key, useProxy) {
+                apiControls.status.textContent = '正在拉取模型列表...';
+                apiControls.status.className = '';
+                
+                let finalUrl, reqOptions;
+                const baseUrl = useProxy ? CORS_PROXY_URL + encodeURIComponent(url) : url;
+
+                if (provider === 'gemini') {
+                    finalUrl = `${baseUrl.replace(/\/$/, "")}/models?key=${key}`;
+                    reqOptions = { method: 'GET', headers: { 'Content-Type': 'application/json' }, mode: 'cors' };
+                } else {
+                    finalUrl = `${baseUrl.replace(/\/$/, "")}/models`;
+                    reqOptions = { method: 'GET', headers: { 'Authorization': `Bearer ${key}` }, mode: 'cors' };
+                }
+
+                try {
+                    const response = await fetch(finalUrl, reqOptions);
+
+                    if (!response.ok) {
+                        let errorDetail = `HTTP ${response.status}: ${response.statusText}`;
+                        try {
+                            const errorData = await response.json();
+                            errorDetail = errorData.error?.message || JSON.stringify(errorData);
+                        } catch (e) {
+                            // Not a JSON response, do nothing extra
+                        }
+                        
+                        let hint = '';
+                        switch (response.status) {
+                            case 400: hint = ' (通常表示API Key格式错误)'; break;
+                            case 401: case 403: hint = ' (请检查API Key是否正确或有权限)'; break;
+                            case 404: hint = ' (请检查API URL是否正确)'; break;
+                            case 429: hint = ' (请求频率过高，请稍后再试)'; break;
+                        }
+                        throw new Error(`${errorDetail}${hint}`);
+                    }
+
+                    const data = await response.json();
+                    apiControls.status.textContent = '模型列表拉取成功！';
+                    apiControls.status.classList.add('success');
+
+                    let models;
+                    if (provider === 'gemini') {
+                        if (!data.models || !Array.isArray(data.models)) throw new Error('Gemini响应格式不正确，未找到models数组');
+                        // **BUG FIX:** Correctly filter models that support 'generateContent'
+                        models = data.models
+                            .filter(model => model.supportedGenerationMethods && model.supportedGenerationMethods.includes('generateContent'))
+                            .map(model => model.name.replace('models/', ''))
+                            .sort();
+                    } else {
+                        const modelData = data.data || data;
+                        if (!Array.isArray(modelData)) throw new Error('响应格式不正确，未找到模型数组');
+                        models = modelData.map(model => model.id).sort();
+                    }
+                    
+                    if (models.length === 0) {
+                        apiControls.status.textContent = '成功连接，但未找到可用模型。';
+                        apiControls.status.classList.add('error');
+                    }
+                    
+                    return models;
+
+                } catch (error) {
+                    let finalErrorMessage = `拉取失败: ${error.message}`;
+                    if (error.name === 'TypeError') {
+                        finalErrorMessage += '\n(可能因网络问题或CORS跨域策略导致，请检查代理设置)';
+                    }
+                    apiControls.status.textContent = finalErrorMessage;
+                    apiControls.status.classList.add('error');
+                    return [];
+                }
+            }
             
-            function updateControlsForProvider() { const provider = apiControls.provider.value; const data = providerData[provider]; apiControls.urlInput.value = data.url; const isPolling = provider === 'polling'; apiControls.keyInput.style.display = isPolling ? 'none' : 'block'; apiControls.keyTextarea.style.display = isPolling ? 'block' : 'none'; apiControls.toggleKey.style.display = isPolling ? 'none' : 'inline-block'; apiControls.model.innerHTML = ''; const placeholderText = data.modelsEndpoint === false ? '此服务商不支持自动拉取模型' : '请先进行连接测试来拉取模型'; const option = document.createElement('option'); option.textContent = placeholderText; apiControls.model.appendChild(option); }
+            function updateControlsForProvider() { const provider = apiControls.provider.value; const data = providerData[provider]; apiControls.urlInput.value = data.url; const isPolling = provider === 'polling'; apiControls.keyInput.style.display = isPolling ? 'none' : 'block'; apiControls.keyTextarea.style.display = isPolling ? 'block' : 'none'; apiControls.toggleKey.style.display = isPolling ? 'none' : 'inline-block'; apiControls.model.innerHTML = ''; const placeholderText = data.testable === false ? '此服务商不支持自动拉取模型' : '请先进行连接测试来拉取模型'; const option = document.createElement('option'); option.textContent = placeholderText; apiControls.model.appendChild(option); }
             
             function getCurrentSettings(modelsList = []) {
                 const provider = apiControls.provider.value;
@@ -413,10 +481,10 @@
                 if (!config.testable) { apiControls.status.textContent = '此服务商不支持自动拉取模型。'; return; }
                 const url = apiControls.urlInput.value.trim();
                 let key = provider === 'polling' ? apiControls.keyTextarea.value.split('\n')[0].trim() : apiControls.keyInput.value.trim();
-                if (!url || !key) { apiControls.status.textContent = 'URL 和 Key 不能为空。'; apiControls.status.classList.add('error'); return; }
+                if ((provider !== 'polling' && !key) || !url) { apiControls.status.textContent = 'URL 和 Key 不能为空。'; apiControls.status.classList.add('error'); return; }
                 
                 const currentConfigForCheck = getCurrentSettings();
-                const models = await fetchModels(url, key, config.useProxy);
+                const models = await fetchModels(provider, url, key, config.useProxy);
                 
                 if (models.length > 0) {
                     const currentModel = apiControls.model.value;
@@ -448,7 +516,7 @@
             apiControls.toggleKey.addEventListener('click', () => { apiControls.keyInput.type = apiControls.keyInput.type === 'password' ? 'text' : 'password'; });
             apiControls.saveBtn.addEventListener('click', saveCurrentSettings);
             apiControls.testBtn.addEventListener('click', testAndFetch);
-            apiControls.restoreBtn.addEventListener('click', () => { localStorage.removeItem('apiSettings'); apiControls.provider.value = 'openai'; apiControls.keyInput.value = ''; apiControls.keyTextarea.value = ''; loadLastSettings(); alert('已恢复默认设置。'); });
+            apiControls.restoreBtn.addEventListener('click', () => { if(confirm('确定要恢复为默认出厂设置吗？')){localStorage.removeItem('apiSettings'); apiControls.provider.value = 'openai'; apiControls.keyInput.value = ''; apiControls.keyTextarea.value = ''; loadLastSettings(); alert('已恢复默认设置。');} });
             
             // --- 页面首次加载 ---
             loadLastSettings();
